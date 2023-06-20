@@ -5,6 +5,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+import utils
 from core.utils import to_tensors
 from moviepy.editor import ImageSequenceClip, VideoFileClip
 from PIL import Image
@@ -54,8 +55,8 @@ def read_mask(path):
 
 def main_worker():
     dataset_path = Path("/nas.dbms/randy/datasets/ucf101")
-    mask_path = Path("/nas.dbms/randy/datasets/ucf101-mask")
-    output_path = Path("/nas.dbms/randy/datasets/ucf101-scenes")
+    mask_path = Path("/nas.dbms/randy/datasets/ucf101-insec-person-only-mask")
+    output_path = Path("/nas.dbms/randy/datasets/ucf101-insec-scenes")
     ckpt = Path("/nas.dbms/randy/projects/E2FGVI/release_model/E2FGVI-HQ-CVPR22.pth")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -63,7 +64,9 @@ def main_worker():
     model = net.InpaintGenerator().to(device)
     data = torch.load(ckpt, map_location=device)
     neighbor_stride = 5
-    max_video_length = 630
+    max_video_length = 500
+    m_files = utils.count_files(dataset_path, extension=".avi")
+    count = 1
 
     model.load_state_dict(data)
     model.eval()
@@ -74,6 +77,8 @@ def main_worker():
 
             if save_path.exists():
                 continue
+
+            print(f"{count}/{m_files}: {video.name}")
 
             video_path = dataset_path / action.name / video.with_suffix(".avi").name
             clip = VideoFileClip(str(video_path))
@@ -155,6 +160,8 @@ def main_worker():
 
             save_path.parent.mkdir(parents=True, exist_ok=True)
             output_clip.write_videofile(str(save_path), audio=False)
+
+            count += 1
 
 
 if __name__ == "__main__":
