@@ -54,15 +54,16 @@ def read_mask(path):
 
 config_file = "../intercutmix/config.json"
 conf = Config(config_file)
-dataset_path = Path(conf.ucf101.path)
-mask_path = Path(conf.unidet.select.output.mask.path)
-output_dir = Path(conf.e2fgvi.output)
+dataset_dir = Path(conf.ucf101.path)
+mask_dir = Path(conf.e2fgvi.mask)
 checkpoint = Path(conf.e2fgvi.checkpoint)
+output_dir = Path(conf.e2fgvi.output)
 
 assert_file(config_file)
-assert_dir(dataset_path)
-assert_dir(mask_path)
+assert_dir(dataset_dir)
+assert_dir(mask_dir)
 assert_file(checkpoint)
+assert type(conf.e2fgvi.max_video_len) == int
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net = importlib.import_module(conf.e2fgvi.model)
@@ -70,14 +71,13 @@ model = net.InpaintGenerator().to(device)
 data = torch.load(checkpoint, map_location=device)
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 neighbor_stride = 5
-max_length = 500
-n_files = count_files(dataset_path)
+n_files = count_files(dataset_dir)
 count = 1
 
 model.load_state_dict(data)
 model.eval()
 
-for action in mask_path.iterdir():
+for action in mask_dir.iterdir():
     for video in action.iterdir():
         output_path = output_dir / action.name / video.with_suffix(".mp4").name
 
@@ -86,7 +86,7 @@ for action in mask_path.iterdir():
 
         print(f"{count}/{n_files}: {video.name}")
 
-        video_path = dataset_path / action.name / video.with_suffix(".avi").name
+        video_path = dataset_dir / action.name / video.with_suffix(".avi").name
         input_video = cv2.VideoCapture(str(video_path))
         w = int(input_video.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -111,7 +111,7 @@ for action in mask_path.iterdir():
 
         video_length = len(frames)
 
-        if video_length > max_length:
+        if video_length > conf.e2fgvi.max_video_len:
             print(f"Skipping long video: {video_path.name} ({n_frames} frames)")
             continue
 
