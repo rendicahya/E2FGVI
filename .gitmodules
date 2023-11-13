@@ -1,0 +1,6 @@
+[submodule "python-utils"]
+	path = python-utils
+	url = https://github.com/rendicahya/python-utils.git
+[submodule "utils"]
+	path = utils
+	url = https://github.com/rendicahya/python-utils.git

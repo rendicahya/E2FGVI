@@ -5,11 +5,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
-import utils
 from core.utils import to_tensors
-from moviepy.editor import ImageSequenceClip, VideoFileClip
 from PIL import Image
-from tqdm import tqdm
+from utils.config import Config
+from utils.file_utils import *
 
 
 def get_ref_index(f, neighbor_ids, length):
@@ -53,116 +52,136 @@ def read_mask(path):
     return masks
 
 
-def main_worker():
-    dataset_path = Path("/nas.dbms/randy/datasets/ucf101")
-    mask_path = Path("/nas.dbms/randy/datasets/ucf101-insec-person-only-mask")
-    output_path = Path("/nas.dbms/randy/datasets/ucf101-insec-scenes")
-    ckpt = Path("/nas.dbms/randy/projects/E2FGVI/release_model/E2FGVI-HQ-CVPR22.pth")
+config_file = "../intercutmix/config.json"
+conf = Config(config_file)
+dataset_path = Path(conf.ucf101.path)
+mask_path = Path(conf.unidet.select.output.mask.path)
+output_dir = Path(conf.e2fgvi.output)
+checkpoint = Path(conf.e2fgvi.checkpoint)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = importlib.import_module("model.e2fgvi_hq")
-    model = net.InpaintGenerator().to(device)
-    data = torch.load(ckpt, map_location=device)
-    neighbor_stride = 5
-    max_video_length = 500
-    m_files = utils.count_files(dataset_path, extension=".avi")
-    count = 1
+assert_file(config_file)
+assert_dir(dataset_path)
+assert_dir(mask_path)
+assert_file(checkpoint)
 
-    model.load_state_dict(data)
-    model.eval()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+net = importlib.import_module(conf.e2fgvi.model)
+model = net.InpaintGenerator().to(device)
+data = torch.load(checkpoint, map_location=device)
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+neighbor_stride = 5
+max_length = 500
+n_files = count_files(dataset_path)
+count = 1
 
-    for action in mask_path.iterdir():
-        for video in action.iterdir():
-            save_path = output_path / action.name / video.with_suffix(".mp4").name
+model.load_state_dict(data)
+model.eval()
 
-            if save_path.exists():
-                continue
+for action in mask_path.iterdir():
+    for video in action.iterdir():
+        output_path = output_dir / action.name / video.with_suffix(".mp4").name
 
-            print(f"{count}/{m_files}: {video.name}")
+        if output_path.exists():
+            continue
 
-            video_path = dataset_path / action.name / video.with_suffix(".avi").name
-            clip = VideoFileClip(str(video_path))
-            video_length = clip.reader.nframes - 1
+        print(f"{count}/{n_files}: {video.name}")
 
-            if video_length > max_video_length:
-                print(f"Skipping long video: {video_path.name} ({video_length} frames)")
-                continue
+        video_path = dataset_path / action.name / video.with_suffix(".avi").name
+        input_video = cv2.VideoCapture(str(video_path))
+        w = int(input_video.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = float(input_video.get(cv2.CAP_PROP_FPS))
+        frames = []
+        video_writer = cv2.VideoWriter(
+            str(output_path),
+            fourcc,
+            fps,
+            (w, h),
+        )
 
-            size = clip.w, clip.h
-            w, h = size
+        while input_video.isOpened():
+            success, image = input_video.read()
 
-            frames = [Image.fromarray(f) for f in clip.iter_frames()]
-            imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
-            frames = [np.array(f).astype(np.uint8) for f in frames]
+            if not success:
+                break
 
-            masks = read_mask(video)
-            binary_masks = [
-                np.expand_dims((np.array(m) != 0).astype(np.uint8), 2) for m in masks
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            frames.append(image)
+
+        video_length = len(frames)
+
+        if video_length > max_length:
+            print(f"Skipping long video: {video_path.name} ({n_frames} frames)")
+            continue
+
+        imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
+        frames = [np.array(f).astype(np.uint8) for f in frames]
+
+        masks = read_mask(video)
+        binary_masks = [
+            np.expand_dims((np.array(m) != 0).astype(np.uint8), 2) for m in masks
+        ]
+
+        masks = to_tensors()(masks).unsqueeze(0)
+        imgs, masks = imgs.to(device), masks.to(device)
+        comp_frames = [None] * video_length
+
+        for f in tqdm(range(0, video_length, neighbor_stride)):
+            neighbor_ids = [
+                i
+                for i in range(
+                    max(0, f - neighbor_stride),
+                    min(video_length, f + neighbor_stride + 1),
+                )
             ]
 
-            masks = to_tensors()(masks).unsqueeze(0)
-            imgs, masks = imgs.to(device), masks.to(device)
-            comp_frames = [None] * video_length
+            ref_ids = get_ref_index(f, neighbor_ids, video_length)
+            selected_imgs = imgs[:1, neighbor_ids + ref_ids, :, :, :]
+            selected_masks = masks[:1, neighbor_ids + ref_ids, :, :, :]
 
-            for f in tqdm(range(0, video_length, neighbor_stride)):
-                neighbor_ids = [
-                    i
-                    for i in range(
-                        max(0, f - neighbor_stride),
-                        min(video_length, f + neighbor_stride + 1),
-                    )
+            with torch.no_grad():
+                masked_imgs = selected_imgs * (1 - selected_masks)
+                mod_size_h = 60
+                mod_size_w = 108
+
+                h_pad = (mod_size_h - h % mod_size_h) % mod_size_h
+                w_pad = (mod_size_w - w % mod_size_w) % mod_size_w
+
+                masked_imgs = torch.cat([masked_imgs, torch.flip(masked_imgs, [3])], 3)[
+                    :, :, :, : h + h_pad, :
                 ]
 
-                ref_ids = get_ref_index(f, neighbor_ids, video_length)
-                selected_imgs = imgs[:1, neighbor_ids + ref_ids, :, :, :]
-                selected_masks = masks[:1, neighbor_ids + ref_ids, :, :, :]
+                masked_imgs = torch.cat([masked_imgs, torch.flip(masked_imgs, [4])], 4)[
+                    :, :, :, :, : w + w_pad
+                ]
 
-                with torch.no_grad():
-                    masked_imgs = selected_imgs * (1 - selected_masks)
-                    mod_size_h = 60
-                    mod_size_w = 108
+                pred_imgs, _ = model(masked_imgs, len(neighbor_ids))
+                pred_imgs = pred_imgs[:, :, :h, :w]
+                pred_imgs = (pred_imgs + 1) / 2
+                pred_imgs = pred_imgs.cpu().permute(0, 2, 3, 1).numpy() * 255
 
-                    h_pad = (mod_size_h - h % mod_size_h) % mod_size_h
-                    w_pad = (mod_size_w - w % mod_size_w) % mod_size_w
+                for i in range(len(neighbor_ids)):
+                    idx = neighbor_ids[i]
+                    img = np.array(pred_imgs[i]).astype(np.uint8) * binary_masks[
+                        idx
+                    ] + frames[idx] * (1 - binary_masks[idx])
 
-                    masked_imgs = torch.cat(
-                        [masked_imgs, torch.flip(masked_imgs, [3])], 3
-                    )[:, :, :, : h + h_pad, :]
+                    if comp_frames[idx] is None:
+                        comp_frames[idx] = img
+                    else:
+                        comp_frames[idx] = (
+                            comp_frames[idx].astype(np.float32) * 0.5
+                            + img.astype(np.float32) * 0.5
+                        )
 
-                    masked_imgs = torch.cat(
-                        [masked_imgs, torch.flip(masked_imgs, [4])], 4
-                    )[:, :, :, :, : w + w_pad]
+        for f in range(video_length):
+            frame = comp_frames[f].astype(np.uint8)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            video_writer.write(frame)
 
-                    pred_imgs, _ = model(masked_imgs, len(neighbor_ids))
-                    pred_imgs = pred_imgs[:, :, :h, :w]
-                    pred_imgs = (pred_imgs + 1) / 2
-                    pred_imgs = pred_imgs.cpu().permute(0, 2, 3, 1).numpy() * 255
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        input_video.release()
+        video_writer.release()
 
-                    for i in range(len(neighbor_ids)):
-                        idx = neighbor_ids[i]
-                        img = np.array(pred_imgs[i]).astype(np.uint8) * binary_masks[
-                            idx
-                        ] + frames[idx] * (1 - binary_masks[idx])
-
-                        if comp_frames[idx] is None:
-                            comp_frames[idx] = img
-                        else:
-                            comp_frames[idx] = (
-                                comp_frames[idx].astype(np.float32) * 0.5
-                                + img.astype(np.float32) * 0.5
-                            )
-
-            output_frames = [
-                comp_frames[f].astype(np.uint8) for f in range(video_length)
-            ]
-
-            output_clip = ImageSequenceClip(output_frames, fps=clip.fps)
-
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            output_clip.write_videofile(str(save_path), audio=False)
-
-            count += 1
-
-
-if __name__ == "__main__":
-    main_worker()
+        count += 1
