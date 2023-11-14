@@ -58,7 +58,7 @@ conf = Config(config_file)
 dataset_dir = Path(conf.ucf101.path)
 mask_dir = Path(conf.e2fgvi.mask)
 checkpoint = Path(conf.e2fgvi.checkpoint)
-output_dir = Path(conf.e2fgvi.output_moviepy)
+output_dir = Path(conf.e2fgvi.output)
 
 assert_file(config_file)
 assert_dir(dataset_dir)
