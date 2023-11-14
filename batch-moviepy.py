@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import torch
 from core.utils import to_tensors
+from moviepy.editor import VideoFileClip
 from PIL import Image
 from utils.config import Config
 from utils.file_utils import *
@@ -57,7 +58,7 @@ conf = Config(config_file)
 dataset_dir = Path(conf.ucf101.path)
 mask_dir = Path(conf.e2fgvi.mask)
 checkpoint = Path(conf.e2fgvi.checkpoint)
-output_dir = Path(conf.e2fgvi.output)
+output_dir = Path(conf.e2fgvi.output_moviepy)
 
 assert_file(config_file)
 assert_dir(dataset_dir)
@@ -86,35 +87,22 @@ for action in mask_dir.iterdir():
 
         print(f"{count}/{n_files}: {video.name}")
 
-        video_path = dataset_dir / action.name / video.with_suffix(".avi").name
-        input_video = cv2.VideoCapture(str(video_path))
-        w = int(input_video.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = float(input_video.get(cv2.CAP_PROP_FPS))
-        frames = []
+        video_path = dataset_dir / action.name / video.with_suffix(conf.ucf101.ext).name
+        clip = VideoFileClip(str(video_path))
+        w, h = clip.w, clip.h
+        video_length = clip.reader.nframes - 1
         video_writer = cv2.VideoWriter(
             str(output_path),
             fourcc,
-            fps,
+            clip.fps,
             (w, h),
         )
 
-        while input_video.isOpened():
-            success, image = input_video.read()
-
-            if not success:
-                break
-
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(image)
-            frames.append(image)
-
-        video_length = len(frames)
-
         if video_length > conf.e2fgvi.max_video_len:
-            print(f"Skipping long video: {video_path.name} ({n_frames} frames)")
+            print(f"Skipping long video: {video_path.name} ({video_length} frames)")
             continue
 
+        frames = [Image.fromarray(f) for f in clip.iter_frames()]
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
         frames = [np.array(f).astype(np.uint8) for f in frames]
 
@@ -181,7 +169,7 @@ for action in mask_dir.iterdir():
             video_writer.write(frame)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        input_video.release()
+        clip.close()
         video_writer.release()
 
         count += 1
