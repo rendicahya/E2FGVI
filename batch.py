@@ -5,11 +5,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+from assertpy.assertpy import assert_that
 from core.utils import to_tensors
 from moviepy.editor import VideoFileClip
 from PIL import Image
-from utils.config import Config
-from utils.file_utils import *
+from python_config import Config
+from python_file import count_files
 
 
 def get_ref_index(f, neighbor_ids, length):
@@ -60,11 +61,11 @@ mask_dir = Path(conf.e2fgvi.mask)
 checkpoint = Path(conf.e2fgvi.checkpoint)
 output_dir = Path(conf.e2fgvi.output)
 
-assert_file(config_file)
-assert_dir(dataset_dir)
-assert_dir(mask_dir)
-assert_file(checkpoint)
-assert type(conf.e2fgvi.max_video_len) == int
+assert_that(config_file).is_file().is_readable()
+assert_that(dataset_dir).is_directory().is_readable()
+assert_that(mask_dir).is_directory().is_readable()
+assert_that(checkpoint).is_file().is_readable()
+assert_that(conf.e2fgvi.max_video_len).is_positive()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net = importlib.import_module(conf.e2fgvi.model)

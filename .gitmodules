@@ -4,3 +4,12 @@
 [submodule "utils"]
 	path = utils
 	url = https://github.com/rendicahya/python-utils.git
+[submodule "python_config"]
+	path = python_config
+	url = https://github.com/rendicahya/python_config.git
+[submodule "assertpy"]
+	path = assertpy
+	url = https://github.com/rendicahya/assertpy.git
+[submodule "python_file"]
+	path = python_file
+	url = https://github.com/rendicahya/python_file.git
