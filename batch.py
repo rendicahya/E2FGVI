@@ -7,10 +7,11 @@ import numpy as np
 import torch
 from assertpy.assertpy import assert_that
 from core.utils import to_tensors
-from moviepy.editor import VideoFileClip
 from PIL import Image
 from python_config import Config
 from python_file import count_files
+from python_video import video_frames, video_info, video_writer_like
+from tqdm import tqdm
 
 
 def get_ref_index(f, neighbor_ids, length):
@@ -54,24 +55,23 @@ def read_mask(path):
     return masks
 
 
-config_file = "../intercutmix/config.json"
-conf = Config(config_file)
+conf = Config("../intercutmix/config.json")
 dataset_dir = Path(conf.ucf101.path)
 mask_dir = Path(conf.e2fgvi.mask)
 checkpoint = Path(conf.e2fgvi.checkpoint)
 output_dir = Path(conf.e2fgvi.output)
 
-assert_that(config_file).is_file().is_readable()
 assert_that(dataset_dir).is_directory().is_readable()
 assert_that(mask_dir).is_directory().is_readable()
 assert_that(checkpoint).is_file().is_readable()
+
 assert_that(conf.e2fgvi.max_video_len).is_positive()
+assert_that(conf.e2fgvi.model).is_not_empty()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net = importlib.import_module(conf.e2fgvi.model)
 model = net.InpaintGenerator().to(device)
 data = torch.load(checkpoint, map_location=device)
-fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 neighbor_stride = 5
 n_files = count_files(dataset_dir)
 count = 1
@@ -89,21 +89,17 @@ for action in mask_dir.iterdir():
         print(f"{count}/{n_files}: {video.name}")
 
         video_path = dataset_dir / action.name / video.with_suffix(conf.ucf101.ext).name
-        clip = VideoFileClip(str(video_path))
-        w, h = clip.w, clip.h
-        video_length = clip.reader.nframes - 1
-        video_writer = cv2.VideoWriter(
-            str(output_path),
-            fourcc,
-            clip.fps,
-            (w, h),
-        )
+        frames_gen = video_frames(video_path, reader=conf.e2fgvi.video_reader)
+        info = video_info(video_path)
+        w, h = info["width"], info["height"]
+        video_length = info["n_frames"]
+        video_writer = video_writer_like(video_path, target=output_path)
 
         if video_length > conf.e2fgvi.max_video_len:
             print(f"Skipping long video: {video_path.name} ({video_length} frames)")
             continue
 
-        frames = [Image.fromarray(f) for f in clip.iter_frames()]
+        frames = [Image.fromarray(f) for f in frames_gen]
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
         frames = [np.array(f).astype(np.uint8) for f in frames]
 
@@ -170,7 +166,6 @@ for action in mask_dir.iterdir():
             video_writer.write(frame)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        clip.close()
         video_writer.release()
 
         count += 1
