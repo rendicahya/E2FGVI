@@ -13,3 +13,6 @@
 [submodule "python_file"]
 	path = python_file
 	url = https://github.com/rendicahya/python_file.git
+[submodule "python_video"]
+	path = python_video
+	url = https://github.com/rendicahya/python_video.git
