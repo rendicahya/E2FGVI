@@ -10,7 +10,7 @@ from core.utils import to_tensors
 from PIL import Image
 from python_config import Config
 from python_file import count_files
-from python_video import video_frames, video_info, video_writer_like
+from python_video import frames_to_video, video_frames, video_info
 from tqdm import tqdm
 
 
@@ -89,14 +89,16 @@ for action in mask_dir.iterdir():
         print(f"{count}/{n_files}: {video.name}")
 
         video_path = dataset_dir / action.name / video.with_suffix(conf.ucf101.ext).name
-        frames_gen = video_frames(video_path, reader=conf.e2fgvi.video_reader)
+        frames_gen = video_frames(video_path, reader=conf.e2fgvi.video.reader)
         info = video_info(video_path)
         w, h = info["width"], info["height"]
-        video_length = info["n_frames"]
-        video_writer = video_writer_like(video_path, target=output_path)
+        n_frames = info["n_frames"]
+        fps = info["fps"]
+        output_frames = []
+        # video_writer = video_writer_like(video_path, target=output_path)
 
-        if video_length > conf.e2fgvi.max_video_len:
-            print(f"Skipping long video: {video_path.name} ({video_length} frames)")
+        if n_frames > conf.e2fgvi.max_video_len:
+            print(f"Skipping long video: {video_path.name} ({n_frames} frames)")
             continue
 
         frames = [Image.fromarray(f) for f in frames_gen]
@@ -110,18 +112,18 @@ for action in mask_dir.iterdir():
 
         masks = to_tensors()(masks).unsqueeze(0)
         imgs, masks = imgs.to(device), masks.to(device)
-        comp_frames = [None] * video_length
+        comp_frames = [None] * n_frames
 
-        for f in tqdm(range(0, video_length, neighbor_stride)):
+        for f in tqdm(range(0, n_frames, neighbor_stride)):
             neighbor_ids = [
                 i
                 for i in range(
                     max(0, f - neighbor_stride),
-                    min(video_length, f + neighbor_stride + 1),
+                    min(n_frames, f + neighbor_stride + 1),
                 )
             ]
 
-            ref_ids = get_ref_index(f, neighbor_ids, video_length)
+            ref_ids = get_ref_index(f, neighbor_ids, n_frames)
             selected_imgs = imgs[:1, neighbor_ids + ref_ids, :, :, :]
             selected_masks = masks[:1, neighbor_ids + ref_ids, :, :, :]
 
@@ -160,12 +162,17 @@ for action in mask_dir.iterdir():
                             + img.astype(np.float32) * 0.5
                         )
 
-        for f in range(video_length):
+        for f in range(n_frames):
             frame = comp_frames[f].astype(np.uint8)
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            video_writer.write(frame)
+
+            # video_writer.write(frame)
+            output_frames.append(frame)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        video_writer.release()
+        # video_writer.release()
+        frames_to_video(
+            output_frames, target=output_path, writer=conf.e2fgvi.video.writer, fps=fps
+        )
 
         count += 1
