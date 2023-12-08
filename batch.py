@@ -55,7 +55,7 @@ def read_mask(path):
     return masks
 
 
-conf = Config("../intercutmix/config.json")
+conf = Config("../config.json")
 dataset_dir = Path(conf.ucf101.path)
 mask_dir = Path(conf.e2fgvi.mask)
 checkpoint = Path(conf.e2fgvi.checkpoint)
