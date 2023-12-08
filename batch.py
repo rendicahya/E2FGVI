@@ -56,7 +56,7 @@ def read_mask(path):
 
 
 conf = Config("../config.json")
-dataset_dir = Path(conf.ucf101.path)
+dataset_dir = Path(conf.e2fgvi.ucf101.path)
 mask_dir = Path(conf.e2fgvi.mask)
 checkpoint = Path(conf.e2fgvi.checkpoint)
 output_dir = Path(conf.e2fgvi.output)
