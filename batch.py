@@ -56,12 +56,13 @@ def read_mask(path):
 
 
 conf = Config("../config.json")
-dataset_dir = Path(conf.e2fgvi.ucf101.path)
-mask_dir = Path(conf.e2fgvi.mask)
+project_root = Path.cwd().parent
+video_in_dir = project_root / conf.e2fgvi.ucf101.path
+mask_dir = project_root / conf.e2fgvi.mask
 checkpoint = Path(conf.e2fgvi.checkpoint)
-output_dir = Path(conf.e2fgvi.output)
+out_dir = Path(conf.e2fgvi.output)
 
-assert_that(dataset_dir).is_directory().is_readable()
+assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_dir).is_directory().is_readable()
 assert_that(checkpoint).is_file().is_readable()
 
@@ -73,7 +74,7 @@ net = importlib.import_module(conf.e2fgvi.model)
 model = net.InpaintGenerator().to(device)
 data = torch.load(checkpoint, map_location=device)
 neighbor_stride = 5
-n_files = count_files(dataset_dir)
+n_files = count_files(video_in_dir)
 count = 1
 
 model.load_state_dict(data)
@@ -81,24 +82,24 @@ model.eval()
 
 for action in mask_dir.iterdir():
     for video in action.iterdir():
-        output_path = output_dir / action.name / video.with_suffix(".mp4").name
+        video_in_path = out_dir / action.name / video.with_suffix(".mp4").name
 
-        if output_path.exists():
+        if video_in_path.exists():
             continue
 
         print(f"{count}/{n_files}: {video.name}")
 
-        video_path = dataset_dir / action.name / video.with_suffix(conf.ucf101.ext).name
-        frames_gen = video_frames(video_path, reader=conf.e2fgvi.video.reader)
-        info = video_info(video_path)
+        video_in_path = (
+            video_in_dir / action.name / video.with_suffix(conf.ucf101.ext).name
+        )
+        frames_gen = video_frames(video_in_path, reader=conf.e2fgvi.video.reader)
+        info = video_info(video_in_path)
         w, h = info["width"], info["height"]
-        n_frames = info["n_frames"]
-        fps = info["fps"]
-        output_frames = []
-        # video_writer = video_writer_like(video_path, target=output_path)
+        n_frames, fps = info["n_frames"], info["fps"]
+        out_frames = []
 
         if n_frames > conf.e2fgvi.max_video_len:
-            print(f"Skipping long video: {video_path.name} ({n_frames} frames)")
+            print(f"Skipping long video: {video_in_path.name} ({n_frames} frames)")
             continue
 
         frames = [Image.fromarray(f) for f in frames_gen]
@@ -166,13 +167,11 @@ for action in mask_dir.iterdir():
             frame = comp_frames[f].astype(np.uint8)
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-            # video_writer.write(frame)
-            output_frames.append(frame)
+            out_frames.append(frame)
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        # video_writer.release()
+        video_in_path.parent.mkdir(parents=True, exist_ok=True)
         frames_to_video(
-            output_frames, target=output_path, writer=conf.e2fgvi.video.writer, fps=fps
+            out_frames, target=video_in_path, writer=conf.e2fgvi.video.writer, fps=fps
         )
 
         count += 1
