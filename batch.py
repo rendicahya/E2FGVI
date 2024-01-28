@@ -60,7 +60,7 @@ project_root = Path.cwd().parent
 video_in_dir = project_root / conf.e2fgvi.ucf101.path
 mask_dir = project_root / conf.e2fgvi.mask
 checkpoint = Path(conf.e2fgvi.checkpoint)
-out_dir = Path(conf.e2fgvi.output)
+out_dir = project_root / conf.e2fgvi.output
 
 assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_dir).is_directory().is_readable()
