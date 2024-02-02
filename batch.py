@@ -57,20 +57,24 @@ def read_mask(path):
 
 conf = Config("../config.json")
 project_root = Path.cwd().parent
-video_in_dir = project_root / conf.e2fgvi.ucf101.path
-mask_dir = project_root / conf.e2fgvi.mask
-checkpoint = Path(conf.e2fgvi.checkpoint)
-out_dir = project_root / conf.e2fgvi.output
+video_in_dir = project_root / conf.e2fgvi.input.video.path
+video_in_ext = conf.e2fgvi.input.video.ext
+video_reader = conf.e2fgvi.input.video.reader
+mask_dir = project_root / conf.e2fgvi.input.mask
+checkpoint = Path(conf.e2fgvi.input.checkpoint)
+video_out_dir = project_root / conf.e2fgvi.output.path
+video_out_ext = conf.e2fgvi.output.ext
+model_path = conf.e2fgvi.input.model
 
 assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_dir).is_directory().is_readable()
 assert_that(checkpoint).is_file().is_readable()
 
-assert_that(conf.e2fgvi.max_video_len).is_positive()
-assert_that(conf.e2fgvi.model).is_not_empty()
+assert_that(conf.e2fgvi.input.video.max_len).is_positive()
+assert_that(model_path).is_not_empty()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-net = importlib.import_module(conf.e2fgvi.model)
+net = importlib.import_module(model_path)
 model = net.InpaintGenerator().to(device)
 data = torch.load(checkpoint, map_location=device)
 neighbor_stride = 5
@@ -81,32 +85,32 @@ model.load_state_dict(data)
 model.eval()
 
 for action in mask_dir.iterdir():
-    for video in action.iterdir():
-        video_in_path = out_dir / action.name / video.with_suffix(".mp4").name
+    for file in action.iterdir():
+        action = file.parent.name
+        video_out_path = video_out_dir / action / file.with_suffix(video_out_ext).name
 
-        if video_in_path.exists():
+        if video_out_path.exists():
+            count += 1
             continue
 
-        print(f"{count}/{n_files}: {video.name}")
+        print(f"{count}/{n_files}: {file.stem}")
 
-        video_in_path = (
-            video_in_dir / action.name / video.with_suffix(conf.ucf101.ext).name
-        )
-        frames_gen = video_frames(video_in_path, reader=conf.e2fgvi.video.reader)
+        video_in_path = video_in_dir / action / file.with_suffix(video_in_ext).name
+        frames_gen = video_frames(video_in_path, reader=video_reader)
         info = video_info(video_in_path)
         w, h = info["width"], info["height"]
         n_frames, fps = info["n_frames"], info["fps"]
         out_frames = []
 
-        if n_frames > conf.e2fgvi.max_video_len:
+        if n_frames > conf.e2fgvi.input.video.max_len:
             print(f"Skipping long video: {video_in_path.name} ({n_frames} frames)")
+            count += 1
             continue
 
         frames = [Image.fromarray(f) for f in frames_gen]
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
         frames = [np.array(f).astype(np.uint8) for f in frames]
-
-        masks = read_mask(video)
+        masks = read_mask(file)
         binary_masks = [
             np.expand_dims((np.array(m) != 0).astype(np.uint8), 2) for m in masks
         ]
@@ -169,9 +173,9 @@ for action in mask_dir.iterdir():
 
             out_frames.append(frame)
 
-        video_in_path.parent.mkdir(parents=True, exist_ok=True)
+        video_out_path.parent.mkdir(parents=True, exist_ok=True)
         frames_to_video(
-            out_frames, target=video_in_path, writer=conf.e2fgvi.video.writer, fps=fps
+            out_frames, target=video_out_path, writer=conf.e2fgvi.output.writer, fps=fps
         )
 
         count += 1
