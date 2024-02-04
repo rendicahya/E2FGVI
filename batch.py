@@ -169,7 +169,6 @@ for action in mask_dir.iterdir():
 
         for f in range(n_frames):
             frame = comp_frames[f].astype(np.uint8)
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
             out_frames.append(frame)
 
