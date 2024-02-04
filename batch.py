@@ -100,6 +100,7 @@ for action in mask_dir.iterdir():
         info = video_info(video_in_path)
         w, h = info["width"], info["height"]
         n_frames, fps = info["n_frames"], info["fps"]
+        n_masks = count_files(file)
         out_frames = []
 
         if n_frames > conf.e2fgvi.input.video.max_len:
@@ -107,7 +108,7 @@ for action in mask_dir.iterdir():
             count += 1
             continue
 
-        frames = [Image.fromarray(f) for f in frames_gen]
+        frames = [Image.fromarray(f) for i, f in enumerate(frames_gen) if i < n_masks]
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
         frames = [np.array(f).astype(np.uint8) for f in frames]
         masks = read_mask(file)
