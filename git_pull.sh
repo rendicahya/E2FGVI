@@ -7,7 +7,11 @@ if [ -f "$GITMODULES_FILE" ]; then
 
     for dir in $submodule_names; do
         if [ -d "$dir" ]; then
-            (cd "$dir" && git pull)
+            cd "$dir" || exit
+            git pull origin master || git pull origin main
+            cd ..
+        else
+            echo "Warning: Submodule directory '$dir' not found."
         fi
     done
 else

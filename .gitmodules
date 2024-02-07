@@ -1,9 +1,3 @@
-[submodule "python-utils"]
-	path = python-utils
-	url = https://github.com/rendicahya/python-utils.git
-[submodule "utils"]
-	path = utils
-	url = https://github.com/rendicahya/python-utils.git
 [submodule "python_config"]
 	path = python_config
 	url = https://github.com/rendicahya/python_config.git
