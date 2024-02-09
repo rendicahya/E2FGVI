@@ -74,7 +74,7 @@ def read_mask(mpath, size):
 def read_frame_from_videos(args):
     vname = args.video
     frames = []
-    if args.use_mp4:
+    if args.video_file:
         vidcap = cv2.VideoCapture(vname)
         success, image = vidcap.read()
         count = 0
@@ -122,9 +122,9 @@ def main_worker():
     model.eval()
 
     # prepare datset
-    args.use_mp4 = True if args.video.endswith('.mp4') else False
+    args.video_file = True if os.path.isfile(args.video) else False
     print(
-        f'Loading videos and masks from: {args.video} | INPUT MP4 format: {args.use_mp4}'
+        f'Loading videos and masks from: {args.video} | Video input: {args.video_file}'
     )
     frames = read_frame_from_videos(args)
     frames, size = resize_frames(frames, size)
@@ -184,7 +184,7 @@ def main_worker():
     ext_name = '_results.mp4'
     save_base_name = args.video.split('/')[-1]
     save_name = save_base_name.replace(
-        '.mp4', ext_name) if args.use_mp4 else save_base_name + ext_name
+        '.mp4', ext_name) if args.video_file else save_base_name + ext_name
     if not os.path.exists(save_dir_name):
         os.makedirs(save_dir_name)
     save_path = os.path.join(save_dir_name, save_name)
