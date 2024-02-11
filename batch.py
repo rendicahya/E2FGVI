@@ -1,4 +1,5 @@
 import importlib
+import io
 import os
 from pathlib import Path
 
@@ -65,6 +66,7 @@ checkpoint = Path(conf.e2fgvi.input.checkpoint)
 video_out_dir = project_root / conf.e2fgvi.output.path
 video_out_ext = conf.e2fgvi.output.ext
 model_path = conf.e2fgvi.input.model
+use_hmdb51 = "hmdb51" in str(video_in_dir)
 
 assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_dir).is_directory().is_readable()
@@ -85,7 +87,13 @@ model.load_state_dict(data)
 model.eval()
 
 for action in mask_dir.iterdir():
+    if action.name != "brush_hair":
+        continue
+
     for file in action.iterdir():
+        if file.stem != "April_09_brush_hair_u_nm_np1_ba_goo_2":
+            continue
+
         action = file.parent.name
         video_out_path = video_out_dir / action / file.with_suffix(video_out_ext).name
 
@@ -96,9 +104,8 @@ for action in mask_dir.iterdir():
         print(f"{count}/{n_files}: {file.stem}")
 
         video_in_path = video_in_dir / action / file.with_suffix(video_in_ext).name
-        frames_gen = video_frames(video_in_path, reader=video_reader)
         info = video_info(video_in_path)
-        w, h = info["width"], info["height"]
+        # w, h = info["width"], info["height"]
         n_frames, fps = info["n_frames"], info["fps"]
         n_masks = count_files(file)
         out_frames = []
@@ -108,7 +115,32 @@ for action in mask_dir.iterdir():
             count += 1
             continue
 
-        frames = [Image.fromarray(f) for i, f in enumerate(frames_gen) if i < n_masks]
+        if use_hmdb51:
+            frames_dir = Path.cwd().parent / conf.e2fgvi.input.frames
+            frames_path = frames_dir / action / file.stem
+            frames = []
+
+            for i, frame_file in enumerate(frames_path.iterdir()):
+                frame = cv2.imread(str(frame_file))
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = Image.fromarray(frame)
+                # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # is_success, buffer = cv2.imencode(".jpg", frame)
+                # io_buf = io.BytesIO(buffer)
+                # np_buf = np.frombuffer(io_buf.getbuffer(), np.uint8)
+                # decode_img = cv2.imdecode(np_buf, -1)
+
+                # frames.append(Image.fromarray(decode_img))
+                frames.append(frame)
+
+                # if i == n_masks - 1:
+                #     break
+        else:
+            frames_gen = video_frames(video_in_path, reader=video_reader)
+            frames = [
+                Image.fromarray(f) for i, f in enumerate(frames_gen) if i < n_masks
+            ]
+
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
         frames = [np.array(f).astype(np.uint8) for f in frames]
         masks = read_mask(file)
