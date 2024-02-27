@@ -61,7 +61,7 @@ conf = Config("../config.json")
 intercutmix_root = Path.cwd().parent
 video_in_dir = intercutmix_root / conf[conf.active.dataset].path
 video_in_ext = conf[conf.active.dataset].ext
-video_reader = conf.e2fgvi.input[conf.active.dataset].video.reader
+video_reader = conf.active.video.reader
 mask_dir = intercutmix_root / conf[conf.active.dataset].annotation.mask.path
 annotation_dir = intercutmix_root / conf[conf.active.dataset].annotation.path
 checkpoint = Path(conf.e2fgvi.checkpoint)
@@ -195,7 +195,7 @@ for action in mask_dir.iterdir():
         frames_to_video(
             out_frames,
             target=video_out_path,
-            writer=conf.e2fgvi.output.writer,
+            writer=conf.active.video.writer,
             fps=fps,
         )
 
