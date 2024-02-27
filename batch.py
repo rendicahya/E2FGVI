@@ -38,7 +38,7 @@ def get_ref_index(f, neighbor_ids, length):
     return ref_index
 
 
-def read_mask(path):
+def read_mask(path, size):
     masks = []
     mnames = os.listdir(path)
     kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
@@ -47,6 +47,7 @@ def read_mask(path):
 
     for mp in mnames:
         m = Image.open(os.path.join(path, mp))
+        m = m.resize(size, Image.NEAREST)
         m = np.array(m.convert("L"))
         m = np.array(m > 0).astype(np.uint8)
         m = cv2.dilate(m, kernel, iterations=4)
@@ -57,22 +58,23 @@ def read_mask(path):
 
 
 conf = Config("../config.json")
-project_root = Path.cwd().parent
-video_in_dir = project_root / conf.e2fgvi.input.video.path
-video_in_ext = conf.e2fgvi.input.video.ext
-video_reader = conf.e2fgvi.input.video.reader
-mask_dir = project_root / conf.e2fgvi.input.mask
-checkpoint = Path(conf.e2fgvi.input.checkpoint)
-video_out_dir = project_root / conf.e2fgvi.output.path
+intercutmix_root = Path.cwd().parent
+video_in_dir = intercutmix_root / conf[conf.active.dataset].path
+video_in_ext = conf[conf.active.dataset].ext
+video_reader = conf.e2fgvi.input[conf.active.dataset].video.reader
+mask_dir = intercutmix_root / conf[conf.active.dataset].annotation.mask.path
+annotation_dir = intercutmix_root / conf[conf.active.dataset].annotation.path
+checkpoint = Path(conf.e2fgvi.checkpoint)
+video_out_dir = intercutmix_root / conf.e2fgvi.output[conf.active.dataset]
 video_out_ext = conf.e2fgvi.output.ext
-model_path = conf.e2fgvi.input.model
-use_hmdb51 = "hmdb51" in str(video_in_dir)
+model_path = conf.e2fgvi.model
+input_type = conf.e2fgvi.input[conf.active.dataset].type
 
 assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_dir).is_directory().is_readable()
 assert_that(checkpoint).is_file().is_readable()
 
-assert_that(conf.e2fgvi.input.video.max_len).is_positive()
+assert_that(conf.e2fgvi.input[conf.active.dataset].video.max_len).is_positive()
 assert_that(model_path).is_not_empty()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -80,79 +82,61 @@ net = importlib.import_module(model_path)
 model = net.InpaintGenerator().to(device)
 data = torch.load(checkpoint, map_location=device)
 neighbor_stride = 5
-n_files = count_files(video_in_dir)
-count = 1
+bar = tqdm(total=count_files(annotation_dir))
 
 model.load_state_dict(data)
 model.eval()
 
 for action in mask_dir.iterdir():
-    if action.name != "brush_hair":
-        continue
-
     for file in action.iterdir():
-        if file.stem != "April_09_brush_hair_u_nm_np1_ba_goo_2":
-            continue
-
         action = file.parent.name
         video_out_path = video_out_dir / action / file.with_suffix(video_out_ext).name
 
         if video_out_path.exists():
-            count += 1
             continue
 
-        print(f"{count}/{n_files}: {file.stem}")
+        bar.set_description(file.name[:50])
 
         video_in_path = video_in_dir / action / file.with_suffix(video_in_ext).name
         info = video_info(video_in_path)
-        # w, h = info["width"], info["height"]
-        n_frames, fps = info["n_frames"], info["fps"]
+        w, h, fps = info["width"], info["height"], info["fps"]
         n_masks = count_files(file)
-        out_frames = []
 
-        if n_frames > conf.e2fgvi.input.video.max_len:
-            print(f"Skipping long video: {video_in_path.name} ({n_frames} frames)")
-            count += 1
-            continue
-
-        if use_hmdb51:
-            frames_dir = Path.cwd().parent / conf.e2fgvi.input.frames
+        if input_type == "frames":
+            frames_dir = intercutmix_root / conf[conf.active.dataset].frames
             frames_path = frames_dir / action / file.stem
+            n_frames = count_files(frames_path)
             frames = []
 
             for i, frame_file in enumerate(frames_path.iterdir()):
                 frame = cv2.imread(str(frame_file))
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frame = Image.fromarray(frame)
-                # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                # is_success, buffer = cv2.imencode(".jpg", frame)
-                # io_buf = io.BytesIO(buffer)
-                # np_buf = np.frombuffer(io_buf.getbuffer(), np.uint8)
-                # decode_img = cv2.imdecode(np_buf, -1)
 
-                # frames.append(Image.fromarray(decode_img))
                 frames.append(frame)
-
-                # if i == n_masks - 1:
-                #     break
         else:
+            n_frames = info["n_frames"]
             frames_gen = video_frames(video_in_path, reader=video_reader)
             frames = [
                 Image.fromarray(f) for i, f in enumerate(frames_gen) if i < n_masks
             ]
 
+        if n_frames > conf.e2fgvi.input[conf.active.dataset].video.max_len:
+            print(f"Skipping long video: {video_in_path.name} ({n_frames} frames)")
+            count += 1
+            continue
+
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
-        frames = [np.array(f).astype(np.uint8) for f in frames]
-        masks = read_mask(file)
+        # frames = [np.array(f).astype(np.uint8) for f in frames]
+        masks = read_mask(file, frames[0].size)
         binary_masks = [
             np.expand_dims((np.array(m) != 0).astype(np.uint8), 2) for m in masks
         ]
-
         masks = to_tensors()(masks).unsqueeze(0)
         imgs, masks = imgs.to(device), masks.to(device)
         comp_frames = [None] * n_frames
 
-        for f in tqdm(range(0, n_frames, neighbor_stride)):
+        for f in range(0, n_frames, neighbor_stride):
             neighbor_ids = [
                 i
                 for i in range(
@@ -200,6 +184,8 @@ for action in mask_dir.iterdir():
                             + img.astype(np.float32) * 0.5
                         )
 
+        out_frames = []
+
         for f in range(n_frames):
             frame = comp_frames[f].astype(np.uint8)
 
@@ -207,7 +193,12 @@ for action in mask_dir.iterdir():
 
         video_out_path.parent.mkdir(parents=True, exist_ok=True)
         frames_to_video(
-            out_frames, target=video_out_path, writer=conf.e2fgvi.output.writer, fps=fps
+            out_frames,
+            target=video_out_path,
+            writer=conf.e2fgvi.output.writer,
+            fps=fps,
         )
 
-        count += 1
+        bar.update(1)
+
+bar.close()

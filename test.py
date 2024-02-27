@@ -151,6 +151,7 @@ def main_worker():
         ref_ids = get_ref_index(f, neighbor_ids, video_length)
         selected_imgs = imgs[:1, neighbor_ids + ref_ids, :, :, :]
         selected_masks = masks[:1, neighbor_ids + ref_ids, :, :, :]
+        print('neighbor_ids + ref_ids:', neighbor_ids + ref_ids)
         with torch.no_grad():
             masked_imgs = selected_imgs * (1 - selected_masks)
             mod_size_h = 60
