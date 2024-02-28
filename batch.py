@@ -95,7 +95,7 @@ for action in mask_dir.iterdir():
         if video_out_path.exists():
             continue
 
-        bar.set_description(file.name[:50])
+        bar.set_description(file.name[:50].ljust(50))
 
         video_in_path = video_in_dir / action / file.with_suffix(video_in_ext).name
         info = video_info(video_in_path)
