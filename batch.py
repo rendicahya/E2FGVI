@@ -7,9 +7,9 @@ import cv2
 import numpy as np
 import torch
 from assertpy.assertpy import assert_that
+from config import settings as conf
 from core.utils import to_tensors
 from PIL import Image
-from python_config import Config
 from python_file import count_files
 from python_video import frames_to_video, video_frames, video_info
 from tqdm import tqdm
@@ -57,7 +57,6 @@ def read_mask(path, size):
     return masks
 
 
-conf = Config("../config.json")
 intercutmix_root = Path.cwd().parent
 video_in_dir = intercutmix_root / conf[conf.active.dataset].path
 video_in_ext = conf[conf.active.dataset].ext
