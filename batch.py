@@ -3,6 +3,7 @@ import io
 import os
 from pathlib import Path
 
+import click
 import cv2
 import numpy as np
 import torch
@@ -76,6 +77,13 @@ assert_that(checkpoint).is_file().is_readable()
 
 assert_that(conf.e2fgvi.input[dataset].video.max_len).is_positive()
 assert_that(model_path).is_not_empty()
+
+print("Dataset:", dataset)
+print("Input:", video_in_dir)
+print("Output:", video_out_dir)
+
+if not click.confirm("\nDo you want to continue?", show_default=True):
+    exit("Aborted.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net = importlib.import_module(model_path)
