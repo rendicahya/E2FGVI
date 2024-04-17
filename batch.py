@@ -57,15 +57,15 @@ def read_mask(path, size):
     return masks
 
 
-intercutmix_root = Path.cwd().parent
+root = Path.cwd().parent
 dataset = conf.active.dataset
-video_in_dir = intercutmix_root / conf[dataset].path
+video_in_dir = root / conf[dataset].path
 video_in_ext = conf[dataset].ext
 video_reader = conf.active.video.reader
-mask_dir = intercutmix_root / conf[dataset].annotation.mask.path
-annotation_dir = intercutmix_root / conf[dataset].annotation.path
+mask_dir = root / conf[dataset].annotation.mask.path
+annotation_dir = root / conf[dataset].annotation.path
 checkpoint = Path(conf.e2fgvi.checkpoint)
-video_out_dir = intercutmix_root / conf.e2fgvi.output[dataset]
+video_out_dir = root / conf.e2fgvi.output[dataset]
 video_out_ext = conf.e2fgvi.output.ext
 model_path = conf.e2fgvi.model
 input_type = conf.e2fgvi.input[dataset].type
@@ -103,7 +103,7 @@ for action in mask_dir.iterdir():
         n_masks = count_files(file)
 
         if input_type == "frames":
-            frames_dir = intercutmix_root / conf[dataset].frames
+            frames_dir = root / conf[dataset].frames
             frames_path = frames_dir / action / file.stem
             n_frames = count_files(frames_path)
             frames = []
