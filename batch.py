@@ -58,22 +58,23 @@ def read_mask(path, size):
 
 
 intercutmix_root = Path.cwd().parent
-video_in_dir = intercutmix_root / conf[conf.active.dataset].path
-video_in_ext = conf[conf.active.dataset].ext
+dataset = conf.active.dataset
+video_in_dir = intercutmix_root / conf[dataset].path
+video_in_ext = conf[dataset].ext
 video_reader = conf.active.video.reader
-mask_dir = intercutmix_root / conf[conf.active.dataset].annotation.mask.path
-annotation_dir = intercutmix_root / conf[conf.active.dataset].annotation.path
+mask_dir = intercutmix_root / conf[dataset].annotation.mask.path
+annotation_dir = intercutmix_root / conf[dataset].annotation.path
 checkpoint = Path(conf.e2fgvi.checkpoint)
-video_out_dir = intercutmix_root / conf.e2fgvi.output[conf.active.dataset]
+video_out_dir = intercutmix_root / conf.e2fgvi.output[dataset]
 video_out_ext = conf.e2fgvi.output.ext
 model_path = conf.e2fgvi.model
-input_type = conf.e2fgvi.input[conf.active.dataset].type
+input_type = conf.e2fgvi.input[dataset].type
 
 assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_dir).is_directory().is_readable()
 assert_that(checkpoint).is_file().is_readable()
 
-assert_that(conf.e2fgvi.input[conf.active.dataset].video.max_len).is_positive()
+assert_that(conf.e2fgvi.input[dataset].video.max_len).is_positive()
 assert_that(model_path).is_not_empty()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -102,7 +103,7 @@ for action in mask_dir.iterdir():
         n_masks = count_files(file)
 
         if input_type == "frames":
-            frames_dir = intercutmix_root / conf[conf.active.dataset].frames
+            frames_dir = intercutmix_root / conf[dataset].frames
             frames_path = frames_dir / action / file.stem
             n_frames = count_files(frames_path)
             frames = []
@@ -120,7 +121,7 @@ for action in mask_dir.iterdir():
                 Image.fromarray(f) for i, f in enumerate(frames_gen) if i < n_masks
             ]
 
-        if n_frames > conf.e2fgvi.input[conf.active.dataset].video.max_len:
+        if n_frames > conf.e2fgvi.input[dataset].video.max_len:
             print(f"Skipping long video: {video_in_path.name} ({n_frames} frames)")
             count += 1
             continue
