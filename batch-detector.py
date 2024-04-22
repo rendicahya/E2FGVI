@@ -76,6 +76,21 @@ def read_mask_bundle(path, size):
     return masks
 
 
+def read_mask_bundle2(path, size):
+    mask_bundle = np.load(path)["arr_0"]
+    masks = []
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+
+    for mp in mask_bundle:
+        mp = cv2.resize(mp, size)
+        mp = np.array(mp > 0).astype(np.uint8)
+        mp = cv2.dilate(mp, kernel, iterations=4)
+
+        masks.append(Image.fromarray(mp * 255))
+
+    return masks
+
+
 root = Path.cwd().parent
 dataset = conf.active.dataset
 detector = conf.active.detector
@@ -83,23 +98,19 @@ mode = conf.active.mode
 video_in_dir = root / conf[dataset].path
 video_in_ext = conf[dataset].ext
 video_reader = conf.active.video.reader
-# annotation_dir = root / conf[dataset].annotation.path
 relevancy_model = conf.relevancy.active.method
 relevancy_thresh = str(conf.relevancy.active.threshold)
-# mask_in_dir = root / conf[dataset].annotation.mask.path
 mask_in_dir = (
     root
     / f"data/{dataset}/{detector}/select/{mode}/REPP/mask/{relevancy_model}/{relevancy_thresh}"
 )
 
 checkpoint = Path(conf.e2fgvi.checkpoint)
-# video_out_dir = root / conf.e2fgvi.output[dataset]
 video_out_dir = mask_in_dir.parent.parent.parent / "scene"
 video_out_ext = conf.e2fgvi.output.ext
 model_path = conf.e2fgvi.model
 input_type = conf.e2fgvi.input[dataset].type
 max_len = conf.e2fgvi.input[dataset].video.max_len
-# skip_videos = conf.e2fgvi.input[dataset].skip
 
 assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_in_dir).is_directory().is_readable()
@@ -108,12 +119,16 @@ assert_that(checkpoint).is_file().is_readable()
 assert_that(max_len).is_positive()
 assert_that(model_path).is_not_empty()
 
+with open("skip.json") as f:
+    skip_videos = json.load(f)
+
 print("Dataset:", dataset)
 print("Detector:", detector)
 print("Video input:", video_in_dir)
 print("Mask input:", mask_in_dir)
 print("Max video length:", max_len)
 print("Output:", video_out_dir)
+print("Skip videos:", len(skip_videos))
 
 # if not click.confirm("\nDo you want to continue?", show_default=True):
 #     exit("Aborted.")
@@ -128,9 +143,6 @@ bar = tqdm(total=count_files(mask_in_dir))
 model.load_state_dict(data)
 model.eval()
 
-with open("skip.json") as f:
-    skip_videos = json.load(f)
-
 for action in mask_in_dir.iterdir():
     for file in action.iterdir():
         if file.stem in skip_videos:
@@ -139,14 +151,14 @@ for action in mask_in_dir.iterdir():
         action = file.parent.name
         video_out_path = video_out_dir / action / file.with_suffix(video_out_ext).name
 
-        if video_out_path.exists() and video_info(video_out_path)["n_frames"] > 0:
+        if video_out_path.exists() and video_out_path.stat().st_size > 0:
+            # and video_info(video_out_path)["n_frames"] > 0:
             bar.update(1)
             continue
 
         video_in_path = video_in_dir / action / file.with_suffix(video_in_ext).name
         info = video_info(video_in_path)
         w, h, fps = info["width"], info["height"], info["fps"]
-        # n_masks = count_files(file)
         n_masks = np.load(file)["arr_0"].shape[0]
 
         if input_type == "frames":
@@ -169,7 +181,6 @@ for action in mask_in_dir.iterdir():
             ]
 
         if n_frames > max_len:
-            # print(f"Skipping long video: {video_in_path.name} ({n_frames} frames)")
             continue
 
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
