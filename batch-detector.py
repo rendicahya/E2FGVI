@@ -116,6 +116,7 @@ assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_in_dir).is_directory().is_readable()
 assert_that(checkpoint).is_file().is_readable()
 
+assert_that(input_type).is_in("videos", "frames")
 assert_that(max_len).is_positive()
 assert_that(model_path).is_not_empty()
 
@@ -144,15 +145,20 @@ model.load_state_dict(data)
 model.eval()
 
 for action in mask_in_dir.iterdir():
+    if action.is_file():
+        bar.update(1)
+        continue
+
     for file in action.iterdir():
         if file.stem in skip_videos:
+            bar.update(1)
             continue
 
         action = file.parent.name
         video_out_path = video_out_dir / action / file.with_suffix(video_out_ext).name
 
-        if video_out_path.exists() and video_out_path.stat().st_size > 0:
-            # and video_info(video_out_path)["n_frames"] > 0:
+        if video_out_path.exists() and video_info(video_out_path)["n_frames"] > 0:
+            # and video_out_path.stat().st_size > 0:
             bar.update(1)
             continue
 
@@ -173,7 +179,7 @@ for action in mask_in_dir.iterdir():
                 frame = Image.fromarray(frame)
 
                 frames.append(frame)
-        else:
+        elif input_type == "videos":
             n_frames = info["n_frames"]
             frames_gen = video_frames(video_in_path, reader=video_reader)
             frames = [
@@ -181,6 +187,7 @@ for action in mask_in_dir.iterdir():
             ]
 
         if n_frames > max_len:
+            bar.update(1)
             continue
 
         imgs = to_tensors()(frames).unsqueeze(0) * 2 - 1
@@ -248,6 +255,7 @@ for action in mask_in_dir.iterdir():
 
                     with open("skip.json", "w") as f:
                         json.dump(skip_videos, f)
+
         out_frames = []
 
         for f in range(n_frames):
