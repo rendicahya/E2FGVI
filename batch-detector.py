@@ -106,7 +106,7 @@ mask_in_dir = (
 )
 
 checkpoint = Path(conf.e2fgvi.checkpoint)
-video_out_dir = mask_in_dir.parent.parent.parent / "scene"
+video_out_dir = Path(conf[dataset].scene.path)
 video_out_ext = conf.e2fgvi.output.ext
 model_path = conf.e2fgvi.model
 input_type = conf.e2fgvi.input[dataset].type
