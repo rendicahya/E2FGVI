@@ -121,7 +121,7 @@ assert_that(max_len).is_positive()
 assert_that(model_path).is_not_empty()
 
 with open("skip.json") as f:
-    skip_videos = json.load(f)
+    skip_videos = json.load(f)[dataset]
 
 print("Dataset:", dataset)
 print("Detector:", detector)
@@ -254,7 +254,7 @@ for action in mask_in_dir.iterdir():
                     skip_videos.append(file.stem)
 
                     with open("skip.json", "w") as f:
-                        json.dump(skip_videos, f)
+                        json.dump(skip_videos, f, indent=2)
 
         out_frames = []
 
