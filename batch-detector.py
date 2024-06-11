@@ -91,21 +91,30 @@ def read_mask_bundle2(path, size):
     return masks
 
 
-root = Path.cwd().parent
 dataset = conf.active.dataset
 detector = conf.active.detector
-mode = conf.active.mode
+object_selection = conf.active.object_selection
+method = "select" if object_selection else "detect"
+method_dir = Path("data") / dataset / detector / method
+use_REPP = conf.active.use_REPP
+
+if method == "detect":
+    mask_in_dir = method_dir / ("REPP/mask" if use_REPP else "mask")
+elif method == "select":
+    mode = conf.active.mode
+    mask_in_dir = method_dir / mode / ("REPP/mask" if use_REPP else "mask")
+
+    if mode == "intercutmix":
+        relevancy_model = conf.relevancy.active.method
+        relevancy_thresh = str(conf.relevancy.active.threshold)
+        mask_in_dir = mask_in_dir / relevancy_model / relevancy_thresh
+
+root = Path.cwd()
+e2fgvi = root / "E2FGVI"
 video_in_dir = root / conf[dataset].path
 video_in_ext = conf[dataset].ext
 video_reader = conf.active.video.reader
-relevancy_model = conf.relevancy.active.method
-relevancy_thresh = str(conf.relevancy.active.threshold)
-mask_in_dir = (
-    root
-    / f"data/{dataset}/{detector}/select/{mode}/REPP/mask/{relevancy_model}/{relevancy_thresh}"
-)
-
-checkpoint = Path(conf.e2fgvi.checkpoint)
+checkpoint = e2fgvi / conf.e2fgvi.checkpoint
 video_out_dir = Path(conf[dataset].scene.path)
 video_out_ext = conf.e2fgvi.output.ext
 model_path = conf.e2fgvi.model
@@ -116,23 +125,21 @@ assert_that(video_in_dir).is_directory().is_readable()
 assert_that(mask_in_dir).is_directory().is_readable()
 assert_that(checkpoint).is_file().is_readable()
 
+assert_that(model_path).is_not_empty()
 assert_that(input_type).is_in("videos", "frames")
 assert_that(max_len).is_positive()
-assert_that(model_path).is_not_empty()
 
-with open("skip.json") as f:
+with open(e2fgvi / "skip.json") as f:
     skip_videos = json.load(f)[dataset]
 
-print("Dataset:", dataset)
-print("Detector:", detector)
-print("Video input:", video_in_dir)
+print("Video input:", video_in_dir.relative_to(root))
 print("Mask input:", mask_in_dir)
 print("Max video length:", max_len)
 print("Output:", video_out_dir)
 print("Skip videos:", len(skip_videos))
 
-# if not click.confirm("\nDo you want to continue?", show_default=True):
-#     exit("Aborted.")
+if not click.confirm("\nDo you want to continue?", show_default=True):
+    exit("Aborted.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net = importlib.import_module(model_path)
