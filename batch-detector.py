@@ -105,8 +105,8 @@ elif method == "select":
     mask_in_dir = method_dir / mode / ("REPP/mask" if use_REPP else "mask")
 
     if mode == "intercutmix":
-        relevancy_model = conf.relevancy.active.method
-        relevancy_thresh = str(conf.relevancy.active.threshold)
+        relevancy_model = conf.active.relevancy.method
+        relevancy_thresh = str(conf.active.relevancy.threshold)
         mask_in_dir = mask_in_dir / relevancy_model / relevancy_thresh
 
 root = Path.cwd()
@@ -208,7 +208,7 @@ for action in mask_in_dir.iterdir():
         comp_frames = [None] * n_frames
 
         for f in range(0, n_frames, neighbor_stride):
-            bar.set_description(f"{file.stem} ({f}/{n_frames})")
+            bar.set_description(f"{file.stem[:50]} ({f}/{n_frames})")
 
             neighbor_ids = [
                 i
