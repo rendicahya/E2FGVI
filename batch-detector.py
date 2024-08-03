@@ -132,8 +132,8 @@ assert_that(max_len).is_positive()
 with open(e2fgvi / "skip.json") as f:
     skip_videos = json.load(f)[dataset]
 
-print("Video input:", video_in_dir.relative_to(root))
-print("Mask input:", mask_in_dir)
+print("Videos:", video_in_dir.relative_to(root))
+print("Masks:", mask_in_dir)
 print("Max video length:", max_len)
 print("Output:", video_out_dir)
 print("Skip videos:", len(skip_videos))
