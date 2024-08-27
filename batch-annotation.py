@@ -1,5 +1,4 @@
 import importlib
-import io
 import os
 from pathlib import Path
 
@@ -7,13 +6,14 @@ import click
 import cv2
 import numpy as np
 import torch
-from assertpy.assertpy import assert_that
-from config import settings as conf
 from core.utils import to_tensors
 from PIL import Image
+from tqdm import tqdm
+
+from assertpy.assertpy import assert_that
+from config import settings as conf
 from python_file import count_files
 from python_video import frames_to_video, video_frames, video_info
-from tqdm import tqdm
 
 
 def get_ref_index(f, neighbor_ids, length):
