@@ -1,12 +1,3 @@
 [submodule "python_config"]
 	path = python_config
 	url = https://github.com/rendicahya/python_config.git
-[submodule "assertpy"]
-	path = assertpy
-	url = https://github.com/rendicahya/assertpy.git
-[submodule "python_file"]
-	path = python_file
-	url = https://github.com/rendicahya/python_file.git
-[submodule "python_video"]
-	path = python_video
-	url = https://github.com/rendicahya/python_video.git
