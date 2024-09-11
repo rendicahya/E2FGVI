@@ -90,7 +90,7 @@ net = importlib.import_module(model_path)
 model = net.InpaintGenerator().to(device)
 data = torch.load(checkpoint, map_location=device)
 neighbor_stride = 5
-bar = tqdm(total=count_files(annotation_dir))
+bar = tqdm(total=count_files(annotation_dir), dynamic_ncols=True)
 
 model.load_state_dict(data)
 model.eval()
