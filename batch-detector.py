@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append(".")
+
 import importlib
 import json
 import os
@@ -91,23 +95,29 @@ def read_mask_bundle2(path, size):
     return masks
 
 
+root = Path.cwd()
 dataset = conf.active.dataset
 detector = conf.active.detector
-object_selection = conf.active.object_selection
-method = "select" if object_selection else "detect"
-method_dir = Path("data") / dataset / detector / method
+object_conf = str(conf.unidet.detect.confidence)
+method = conf.active.mode
+# object_selection = conf.active.object_selection
+# method = "select" if object_selection else "detect"
+# method_dir = Path("data") / dataset / detector / method
 use_REPP = conf.active.use_REPP
+mid_dir = root / "data" / dataset / detector / object_conf / method
 
-if method == "detect":
-    mask_in_dir = method_dir / ("REPP/mask" if use_REPP else "mask")
-elif method == "select":
-    mode = conf.active.mode
-    mask_in_dir = method_dir / mode / ("REPP/mask" if use_REPP else "mask")
+if method in ("allcutmix", "actorcutmix"):
+    mask_in_dir = mid_dir / ("REPP/mask" if use_REPP else "mask")
+else:
+    relevancy_method = conf.active.relevancy.method
+    relevancy_thresh = str(conf.active.relevancy.threshold)
 
-    if mode == "intercutmix":
-        relevancy_model = conf.active.relevancy.method
-        relevancy_thresh = str(conf.active.relevancy.threshold)
-        mask_in_dir = mask_in_dir / relevancy_model / relevancy_thresh
+    mask_in_dir = (
+        mid_dir
+        / ("REPP/mask" if use_REPP else "mask")
+        / relevancy_method
+        / relevancy_thresh
+    )
 
 root = Path.cwd()
 e2fgvi = root / "E2FGVI"
