@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 import cv2
+import mmcv
 import numpy as np
 import torch
 from core.utils import to_tensors
@@ -18,7 +19,7 @@ from tqdm import tqdm
 from assertpy.assertpy import assert_that
 from config import settings as conf
 from python_file import count_files
-from python_video import frames_to_video, video_frames, video_info
+from python_video import frames_to_video, video_frames
 
 
 def get_ref_index(f, neighbor_ids, length):
@@ -174,14 +175,18 @@ for action in mask_in_dir.iterdir():
         action = file.parent.name
         video_out_path = video_out_dir / action / file.with_suffix(video_out_ext).name
 
-        if video_out_path.exists() and video_info(video_out_path)["n_frames"] > 0:
+        if (
+            video_out_path.exists()
+            and mmcv.VideoReader(str(video_out_path)).frame_cnt > 0
+        ):
             # and video_out_path.stat().st_size > 0:
             bar.update(1)
             continue
 
         video_in_path = video_in_dir / action / file.with_suffix(video_in_ext).name
-        info = video_info(video_in_path)
-        w, h, fps = info["width"], info["height"], info["fps"]
+        info = mmcv.VideoReader(str(video_in_path))
+        w, h = info.resolution
+        fps = info.fps
         n_masks = np.load(file)["arr_0"].shape[0]
 
         if input_type == "frames":
