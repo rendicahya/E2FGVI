@@ -101,9 +101,6 @@ dataset = conf.active.dataset
 detector = conf.active.detector
 object_conf = str(conf.unidet.detect.confidence)
 method = conf.active.mode
-# object_selection = conf.active.object_selection
-# method = "select" if object_selection else "detect"
-# method_dir = Path("data") / dataset / detector / method
 use_REPP = conf.active.use_REPP
 mid_dir = root / "data" / dataset / detector / object_conf / method
 
